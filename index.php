@@ -219,6 +219,20 @@
             margin-bottom: 16px;
             display: none;
         }
+
+        .email-note {
+            background-color: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #2e7d32;
+        }
+        
+        .email-note i {
+            margin-right: 8px;
+        }
     </style>
 </head>
 <body>
@@ -265,6 +279,11 @@
                     <label for="redeemCode" class="form-label"><i class="fas fa-key"></i> YOUR REDEEM CODE</label>
                     <input type="text" class="form-control" id="redeemCode" name="redeemCode" placeholder="Enter your redemption code" required>
                     <div class="error-feedback" id="redeemCodeError"></div>
+                </div>
+                
+                <div class="email-note">
+                    <i class="fas fa-envelope-open-text"></i>
+                    After clicking "REDEEM NOW", your order details and product access will be sent directly to your email address.
                 </div>
                 
                 <button type="submit" class="btn btn-redeem" id="redeemButton">
