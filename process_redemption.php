@@ -1,4 +1,6 @@
 <?php
+header('Content-Type: application/json');
+
 // Database connection settings
 $host = "srv1919.hstgr.io";
 $dbname = "u735634963_nedmons";
@@ -14,97 +16,94 @@ $response = [
 
 // Function to sanitize input data
 function sanitize($data) {
-    $data = trim($data);
-    $data = stripslashes($data);
-    $data = htmlspecialchars($data);
-    return $data;
+    return htmlspecialchars(trim(stripslashes($data)));
 }
 
 // Process form submission
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Get and sanitize form data
-    $order_id = isset($_POST['orderID']) ? sanitize($_POST['orderID']) : '';
-    $redeem_code = isset($_POST['redeemCode']) ? sanitize($_POST['redeemCode']) : '';
-    $email = isset($_POST['email']) ? sanitize($_POST['email']) : '';
-    
-    // Validate required fields
-    if (empty($order_id)) {
-        $response['errors'][] = "Order ID is required";
-    }
-    
-    if (empty($redeem_code)) {
-        $response['errors'][] = "Redemption code is required";
-    }
-    
-    if (empty($email)) {
-        $response['errors'][] = "Email address is required";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $response['errors'][] = "Invalid email format";
-    }
-    
-    // If no validation errors, proceed to database check
-    if (empty($response['errors'])) {
-        try {
+    try {
+        // Get and sanitize form data
+        $order_id = isset($_POST['orderID']) ? sanitize($_POST['orderID']) : '';
+        $redeem_code = isset($_POST['redeemCode']) ? sanitize($_POST['redeemCode']) : '';
+        $email = isset($_POST['email']) ? sanitize($_POST['email']) : '';
+        
+        // Validate required fields
+        if (empty($order_id)) {
+            $response['errors'][] = "Order ID is required";
+        }
+        
+        if (empty($redeem_code)) {
+            $response['errors'][] = "Redemption code is required";
+        }
+        
+        if (empty($email)) {
+            $response['errors'][] = "Email address is required";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $response['errors'][] = "Invalid email format";
+        }
+        
+        // If no validation errors, proceed to database check
+        if (empty($response['errors'])) {
             // Create PDO connection
             $pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-            
-            // Set the PDO error mode to exception
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             
-            // Prepare SQL query to check redemption code and order ID
+            // Check redemption code and order ID
             $stmt = $pdo->prepare("SELECT p.*, r.is_redeemed FROM redemption_codes r 
-                                   JOIN products p ON r.product_id = p.id
-                                   WHERE r.code = :code AND r.order_id = :order_id
-                                   LIMIT 1");
+                                 JOIN products p ON r.product_id = p.id
+                                 WHERE r.code = :code AND r.order_id = :order_id
+                                 LIMIT 1");
             
-            $stmt->bindParam(':code', $redeem_code, PDO::PARAM_STR);
-            $stmt->bindParam(':order_id', $order_id, PDO::PARAM_STR);
-            $stmt->execute();
+            $stmt->execute([
+                ':code' => $redeem_code,
+                ':order_id' => $order_id
+            ]);
             
-            // Check if the code exists and is valid
             if ($stmt->rowCount() > 0) {
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 
-                // Check if the code has already been redeemed
                 if ($row['is_redeemed'] == 1) {
                     $response['message'] = "This code has already been redeemed.";
                 } else {
                     // Mark code as redeemed
                     $update_stmt = $pdo->prepare("UPDATE redemption_codes 
-                                                 SET is_redeemed = 1, redeemed_at = NOW(), email = :email
-                                                 WHERE code = :code AND order_id = :order_id");
+                                               SET is_redeemed = 1, 
+                                                   redeemed_at = NOW(), 
+                                                   email = :email
+                                               WHERE code = :code 
+                                               AND order_id = :order_id");
                     
-                    $update_stmt->bindParam(':email', $email, PDO::PARAM_STR);
-                    $update_stmt->bindParam(':code', $redeem_code, PDO::PARAM_STR);
-                    $update_stmt->bindParam(':order_id', $order_id, PDO::PARAM_STR);
-                    $update_stmt->execute();
+                    $update_stmt->execute([
+                        ':email' => $email,
+                        ':code' => $redeem_code,
+                        ':order_id' => $order_id
+                    ]);
                     
-                    // Prepare email with product info
-                    sendProductEmail($email, $row);
-                    
-                    $response['success'] = true;
-                    $response['message'] = "Your code has been redeemed successfully. Product details have been sent to your email.";
+                    if (sendProductEmail($email, $row)) {
+                        $response['success'] = true;
+                        $response['message'] = "Your code has been redeemed successfully. Product details have been sent to your email.";
+                    } else {
+                        throw new Exception("Failed to send confirmation email");
+                    }
                 }
             } else {
                 $response['message'] = "Invalid redemption code or order ID. Please check and try again.";
             }
-            
-        } catch(PDOException $e) {
-            $response['message'] = "Database error: " . $e->getMessage();
-            // In production, you would log this error instead of displaying it
+        } else {
+            $response['message'] = "Please correct the following errors";
         }
-    } else {
-        $response['message'] = "Please correct the following errors:";
+    } catch(PDOException $e) {
+        $response['message'] = "Database error occurred. Please try again later.";
+        error_log("Database Error: " . $e->getMessage());
+    } catch(Exception $e) {
+        $response['message'] = $e->getMessage();
+        error_log("General Error: " . $e->getMessage());
     }
 }
 
-/**
- * Function to send styled email with product information
- * 
- * @param string $email Recipients email address
- * @param array $product Product information from database
- * @return bool Success status
- */
+echo json_encode($response);
+exit;
+
 function sendProductEmail($email, $product) {
     // Email subject
     $subject = "Your Monsdigi Product: " . $product['name'];
@@ -236,8 +235,6 @@ function sendProductEmail($email, $product) {
                             <td>' . htmlspecialchars($product['id']) . '</td>
                         </tr>';
     
-    // Add dynamic product fields from database
-    // These will vary based on your database structure
     if (!empty($product['license_key'])) {
         $html_message .= '
                         <tr>
@@ -266,7 +263,6 @@ function sendProductEmail($email, $product) {
                     </table>
                 </div>';
     
-    // Add access button if URL is provided
     if (!empty($product['access_url'])) {
         $html_message .= '
                 <center>
@@ -316,84 +312,6 @@ function sendProductEmail($email, $product) {
     $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
     
     // Send email
-    $mail_sent = mail($email, $subject, $html_message, $headers);
-    
-    return $mail_sent;
-}
-
-// Return JSON response for AJAX requests
-if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-    header('Content-Type: application/json');
-    echo json_encode($response);
-    exit;
-}
-
-// For regular form submissions, redirect with appropriate message
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    if ($response['success']) {
-        // Redirect to success page
-        header("Location: redemption_success.php?email=" . urlencode($email));
-        exit;
-    } else {
-        // Redirect back to the form with error message
-        $error_msg = urlencode($response['message']);
-        
-        if (!empty($response['errors'])) {
-            $error_msg .= ': ' . urlencode(implode(', ', $response['errors']));
-        }
-        
-        header("Location: index.php?error=" . $error_msg);
-        exit;
-    }
+    return mail($email, $subject, $html_message, $headers);
 }
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Processing Redemption</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            background: linear-gradient(135deg, #3a4654 0%, #2a3541 100%);
-            font-family: 'Segoe UI', Arial, sans-serif;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .processing-card {
-            background-color: white;
-            border-radius: 16px;
-            padding: 35px;
-            max-width: 550px;
-            margin: 50px auto;
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
-            text-align: center;
-        }
-        .spinner-border {
-            width: 3rem;
-            height: 3rem;
-            color: #4a90e2;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="processing-card">
-            <div class="spinner-border mb-4" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <h2 class="mb-4">Processing Your Redemption</h2>
-            <p class="text-muted">Please wait while we validate your information...</p>
-        </div>
-    </div>
-    
-    <script>
-        // This page will only show if the form is submitted directly and JavaScript is disabled
-        // Otherwise, the PHP redirect will take effect
-    </script>
-</body>
-</html>
