@@ -48,10 +48,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             
-            // Check redemption code and order ID
-            $stmt = $pdo->prepare("SELECT p.*, r.is_redeemed FROM redemption_codes r 
-                                 JOIN products p ON r.product_id = p.id
-                                 WHERE r.code = :code AND r.order_id = :order_id
+            // First check if the code exists and is valid
+            $stmt = $pdo->prepare("SELECT * FROM redemption_codes 
+                                 WHERE code = :code 
+                                 AND order_id = :order_id
                                  LIMIT 1");
             
             $stmt->execute([
@@ -60,30 +60,39 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             ]);
             
             if ($stmt->rowCount() > 0) {
-                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                $redemption = $stmt->fetch(PDO::FETCH_ASSOC);
                 
-                if ($row['is_redeemed'] == 1) {
+                if ($redemption['is_redeemed'] == 1) {
                     $response['message'] = "This code has already been redeemed.";
                 } else {
-                    // Mark code as redeemed
-                    $update_stmt = $pdo->prepare("UPDATE redemption_codes 
-                                               SET is_redeemed = 1, 
-                                                   redeemed_at = NOW(), 
-                                                   email = :email
-                                               WHERE code = :code 
-                                               AND order_id = :order_id");
+                    // Get product details
+                    $product_stmt = $pdo->prepare("SELECT * FROM products WHERE id = :product_id LIMIT 1");
+                    $product_stmt->execute([':product_id' => $redemption['product_id']]);
+                    $product = $product_stmt->fetch(PDO::FETCH_ASSOC);
                     
-                    $update_stmt->execute([
-                        ':email' => $email,
-                        ':code' => $redeem_code,
-                        ':order_id' => $order_id
-                    ]);
-                    
-                    if (sendProductEmail($email, $row)) {
-                        $response['success'] = true;
-                        $response['message'] = "Your code has been redeemed successfully. Product details have been sent to your email.";
+                    if ($product) {
+                        // Mark code as redeemed
+                        $update_stmt = $pdo->prepare("UPDATE redemption_codes 
+                                                   SET is_redeemed = 1, 
+                                                       redeemed_at = NOW(), 
+                                                       email = :email
+                                                   WHERE code = :code 
+                                                   AND order_id = :order_id");
+                        
+                        $update_stmt->execute([
+                            ':email' => $email,
+                            ':code' => $redeem_code,
+                            ':order_id' => $order_id
+                        ]);
+                        
+                        if (sendProductEmail($email, $product)) {
+                            $response['success'] = true;
+                            $response['message'] = "Your code has been redeemed successfully. Product details have been sent to your email.";
+                        } else {
+                            throw new Exception("Failed to send confirmation email");
+                        }
                     } else {
-                        throw new Exception("Failed to send confirmation email");
+                        $response['message'] = "Product not found. Please contact support.";
                     }
                 }
             } else {
