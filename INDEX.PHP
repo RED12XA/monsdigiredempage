@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monsdigi - Redeem Code</title>
-    <!-- Bootstrap CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: #2c3440;
@@ -79,6 +78,7 @@
             margin: 50px auto;
             box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
             transition: transform 0.3s ease;
+            animation: fadeIn 0.6s ease-out forwards;
         }
         
         .redemption-card:hover {
@@ -153,17 +153,6 @@
             box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
         }
         
-        .form-check-label {
-            font-size: 14px;
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-        
-        .form-check-input:checked {
-            background-color: var(--accent-color);
-            border-color: var(--accent-color);
-        }
-        
         .btn-redeem {
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
             color: white;
@@ -177,66 +166,23 @@
             margin: 25px auto 0;
             transition: all 0.3s ease;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            width: 100%;
         }
         
-        .btn-redeem:hover {
+        .btn-redeem:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 7px 20px rgba(0, 0, 0, 0.2);
             background: linear-gradient(135deg, var(--accent-color) 0%, var(--primary-color) 100%);
         }
         
-        .disclaimer {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-top: 12px;
-            line-height: 1.6;
-            text-align: center;
-            padding-top: 20px;
-            border-top: 1px solid #f0f0f0;
-            margin-top: 30px;
+        .btn-redeem:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
         }
         
-        .monsdigi-mascot {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            width: 100px;
-            transition: transform 0.5s ease;
-            z-index: 1000;
-        }
-        
-        .monsdigi-mascot:hover {
-            transform: translateY(-10px) rotate(5deg);
-        }
-        
-        .input-group {
-            margin-bottom: 24px;
-        }
-        
-        .input-group-text {
-            background-color: #f8f9fa;
-            border: 1px solid var(--input-border);
-            border-radius: 8px 0 0 8px;
-            padding: 0 15px;
-        }
-        
-        .phone-input {
-            border-radius: 0 8px 8px 0 !important;
-            margin-bottom: 0;
-        }
-        
-        .form-floating {
-            margin-bottom: 24px;
-        }
-        
-        .form-floating .form-control {
-            height: calc(3.5rem + 2px);
-            padding: 1rem 0.75rem;
-            margin-bottom: 0;
-        }
-        
-        .form-floating label {
-            padding: 1rem 0.75rem;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         @media (max-width: 767px) {
@@ -254,36 +200,48 @@
                 bottom: 10px;
                 left: 10px;
             }
-            
-            .btn-redeem {
-                width: 100%;
-            }
         }
         
-        /* Animation styles */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .redemption-card {
-            animation: fadeIn 0.6s ease-out forwards;
+        .loading-spinner {
+            display: none;
+            margin-right: 8px;
         }
         
         .form-group {
             position: relative;
             margin-bottom: 24px;
         }
+        
+        .error-feedback {
+            color: #dc3545;
+            font-size: 0.875rem;
+            margin-top: -20px;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .email-note {
+            background-color: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #2e7d32;
+        }
+        
+        .email-note i {
+            margin-right: 8px;
+        }
     </style>
 </head>
 <body>
-    <!-- Navigation Bar -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container">
             <a class="navbar-brand" href="#">
                 <img src="logo.png" alt="Monsdigi Logo" height="30">
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <i class="fas fa-bars"></i>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -296,7 +254,6 @@
         </div>
     </nav>
 
-    <!-- Main Content -->
     <div class="container">
         <div class="redemption-card">
             <div class="logo">
@@ -305,64 +262,109 @@
             
             <h1>REDEEM YOUR CODE</h1>
             
-            <form action="process_redemption.php" method="POST">
+            <form id="redemptionForm">
                 <div class="form-group">
                     <label for="orderID" class="form-label"><i class="fas fa-hashtag"></i> YOUR ORDER ID</label>
                     <input type="text" class="form-control" id="orderID" name="orderID" placeholder="Enter your order ID" required>
+                    <div class="error-feedback" id="orderIDError"></div>
                 </div>
                 
                 <div class="form-group">
                     <label for="email" class="form-label"><i class="fas fa-envelope"></i> YOUR EMAIL</label>
                     <input type="email" class="form-control" id="email" name="email" placeholder="Enter your email address" required>
-                </div>
-                
-                
-                <div class="form-check mb-3">
-                    <label class="form-check-label" for="sendNotifications">
-                        <i class="fas fa-bell me-1"></i>After clicking on 'Redeem', your product will be sent directly to your email.
-                    </label>
+                    <div class="error-feedback" id="emailError"></div>
                 </div>
                 
                 <div class="form-group">
                     <label for="redeemCode" class="form-label"><i class="fas fa-key"></i> YOUR REDEEM CODE</label>
                     <input type="text" class="form-control" id="redeemCode" name="redeemCode" placeholder="Enter your redemption code" required>
+                    <div class="error-feedback" id="redeemCodeError"></div>
                 </div>
                 
-                <button type="submit" class="btn btn-redeem">
+                <div class="email-note">
+                    <i class="fas fa-envelope-open-text"></i>
+                    After clicking "REDEEM NOW", your order details and product access will be sent directly to your email address.
+                </div>
+                
+                <button type="submit" class="btn btn-redeem" id="redeemButton">
+                    <span class="spinner-border spinner-border-sm loading-spinner" role="status" aria-hidden="true"></span>
                     <i class="fas fa-unlock-alt me-2"></i> REDEEM NOW
                 </button>
             </form>
         </div>
     </div>
 
-    <!-- Mascot Image -->
-    <img src="logo.png" alt="Monsdigi Mascot" class="monsdigi-mascot">
-
-    <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Page Animation Script -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // Add smooth scrolling to all links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                document.querySelector(this.getAttribute('href')).scrollIntoView({
-                    behavior: 'smooth'
-                });
-            });
-        });
-        
-        // Form validation enhancement
-        const form = document.querySelector('form');
-        form.addEventListener('submit', function(event) {
-            const orderID = document.getElementById('orderID').value.trim();
-            const redeemCode = document.getElementById('redeemCode').value.trim();
-            const email = document.getElementById('email').value.trim();
+        document.getElementById('redemptionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
             
-            if (!orderID || !redeemCode || !email) {
-                event.preventDefault();
-                alert('Please fill in all required fields.');
+            const form = this;
+            const submitButton = document.getElementById('redeemButton');
+            const loadingSpinner = submitButton.querySelector('.loading-spinner');
+            
+            // Reset error messages
+            document.querySelectorAll('.error-feedback').forEach(el => {
+                el.style.display = 'none';
+                el.textContent = '';
+            });
+            
+            // Disable form submission
+            submitButton.disabled = true;
+            loadingSpinner.style.display = 'inline-block';
+            
+            try {
+                const formData = new FormData(form);
+                const response = await fetch('process_redemption.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Success!',
+                        text: result.message,
+                        confirmButtonColor: '#4a90e2'
+                    }).then(() => {
+                        window.location.href = `redemption_success.php?email=${encodeURIComponent(formData.get('email'))}`;
+                    });
+                } else {
+                    if (result.errors && result.errors.length > 0) {
+                        result.errors.forEach(error => {
+                            if (error.includes('Order ID')) {
+                                document.getElementById('orderIDError').textContent = error;
+                                document.getElementById('orderIDError').style.display = 'block';
+                            } else if (error.includes('email')) {
+                                document.getElementById('emailError').textContent = error;
+                                document.getElementById('emailError').style.display = 'block';
+                            } else if (error.includes('Redemption code')) {
+                                document.getElementById('redeemCodeError').textContent = error;
+                                document.getElementById('redeemCodeError').style.display = 'block';
+                            }
+                        });
+                    }
+                    
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: result.message,
+                        confirmButtonColor: '#4a90e2'
+                    });
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: 'An unexpected error occurred. Please try again.',
+                    confirmButtonColor: '#4a90e2'
+                });
+            } finally {
+                submitButton.disabled = false;
+                loadingSpinner.style.display = 'none';
             }
         });
     </script>
