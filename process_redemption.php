@@ -1,5 +1,7 @@
 <?php
 header('Content-Type: application/json');
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
 
 // Database connection settings
 $host = "srv1919.hstgr.io";
@@ -44,46 +46,52 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         // If no validation errors, proceed to database check
         if (empty($response['errors'])) {
-            // Create PDO connection
-            $pdo = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            // Create PDO connection with error handling
+            $dsn = "mysql:host=$host;dbname=$dbname;charset=utf8mb4";
+            $options = [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ];
             
-            // First check if the code exists and is valid
+            $pdo = new PDO($dsn, $username, $password, $options);
+            
+            // Debug query
+            $debug_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM redemption_codes");
+            $debug_stmt->execute();
+            $table_exists = $debug_stmt->fetch();
+            
+            if ($table_exists['count'] === false) {
+                throw new Exception("Redemption codes table not found");
+            }
+            
+            // Check if the code exists and is valid
             $stmt = $pdo->prepare("SELECT * FROM redemption_codes 
-                                 WHERE code = :code 
-                                 AND order_id = :order_id
+                                 WHERE code = ? AND order_id = ?
                                  LIMIT 1");
             
-            $stmt->execute([
-                ':code' => $redeem_code,
-                ':order_id' => $order_id
-            ]);
+            $stmt->execute([$redeem_code, $order_id]);
+            $redemption = $stmt->fetch();
             
-            if ($stmt->rowCount() > 0) {
-                $redemption = $stmt->fetch(PDO::FETCH_ASSOC);
-                
+            if ($redemption) {
                 if ($redemption['is_redeemed'] == 1) {
                     $response['message'] = "This code has already been redeemed.";
                 } else {
                     // Get product details
-                    $product_stmt = $pdo->prepare("SELECT * FROM products WHERE id = :product_id LIMIT 1");
-                    $product_stmt->execute([':product_id' => $redemption['product_id']]);
-                    $product = $product_stmt->fetch(PDO::FETCH_ASSOC);
+                    $product_stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? LIMIT 1");
+                    $product_stmt->execute([$redemption['product_id']]);
+                    $product = $product_stmt->fetch();
                     
                     if ($product) {
                         // Mark code as redeemed
                         $update_stmt = $pdo->prepare("UPDATE redemption_codes 
                                                    SET is_redeemed = 1, 
                                                        redeemed_at = NOW(), 
-                                                       email = :email
-                                                   WHERE code = :code 
-                                                   AND order_id = :order_id");
+                                                       email = ?
+                                                   WHERE code = ? 
+                                                   AND order_id = ?");
                         
-                        $update_stmt->execute([
-                            ':email' => $email,
-                            ':code' => $redeem_code,
-                            ':order_id' => $order_id
-                        ]);
+                        $update_stmt->execute([$email, $redeem_code, $order_id]);
                         
                         if (sendProductEmail($email, $product)) {
                             $response['success'] = true;
@@ -102,11 +110,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $response['message'] = "Please correct the following errors";
         }
     } catch(PDOException $e) {
-        $response['message'] = "Database error occurred. Please try again later.";
         error_log("Database Error: " . $e->getMessage());
+        $response['message'] = "Database connection error. Please try again later.";
+        $response['debug'] = $e->getMessage(); // Remove this in production
     } catch(Exception $e) {
-        $response['message'] = $e->getMessage();
         error_log("General Error: " . $e->getMessage());
+        $response['message'] = $e->getMessage();
     }
 }
 
